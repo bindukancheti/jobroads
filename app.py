@@ -1,6 +1,5 @@
 import sqlite3
-import datetime
-from flask import Flask,render_template, g, request, redirect, url_for
+from adskit import *
 
 PATH='db/jobs.sqlite'
 app=Flask(__name__)
@@ -59,4 +58,4 @@ def review(employer_id):
 	return render_template('review.html',employer_id=employer_id)
 
 if __name__=='__main__':
-	app.run(debug=True,host='0.0.0.0',port=80)
+	app.run(debug=True,host='0.0.0.0',port=8008)
