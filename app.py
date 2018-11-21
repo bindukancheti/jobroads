@@ -1,8 +1,11 @@
-import sqlite3
-from adskit import *
+from adslib import *
 
-PATH='db/jobs.sqlite'
 app=Flask(__name__)
+
+ini=jroads()
+uri='mongodb://' +ini['connexion']
+connexion=mcx(uri)
+dbo=connexion[ini['dbase']]
 
 def open_connection():
 	connection=getattr(g,'_connection',None)
@@ -30,32 +33,56 @@ def close_connection(exception):
 @app.route('/')
 @app.route('/jobs')
 def jobs():
-	jobs=execute_sql('SELECT job.id, job.title, job.description, job.salary, employer.id as employer_id, employer.name as employer_name FROM job JOIN employer ON employer.id = job.employer_id')
+	print('Home Page')
+	pipe=[{'$lookup':{'from':'employer','localField':'employer_id','foreignField':'id', 'as':'emBED'}},
+	{'$unwind':'$emBED'},
+	{'$project':{'id':1,'_id':0,'title':1,'description':1,'salary':1,'employer_id':'$emBED.id','employer_name':'$emBED.name'}}]
+	jobs=dbo.job.aggregate(pipe)
+	print(jobs)
 	return render_template('index.html',jobs=jobs)
 
 @app.route('/job/<job_id>')
 def job(job_id):
-	job=execute_sql('SELECT job.id, job.title, job.description, job.salary, employer.id as employer_id, employer.name as employer_name FROM job JOIN employer ON employer.id = job.employer_id WHERE job.id = ?', [job_id], single=True)
-	return render_template('job.html', job=job)
+	print('Job Page')
+	qpipe=[{'$match':{'id':int(job_id)}},
+	{'$lookup':{'from':'employer','localField':'employer_id','foreignField':'id','as':'emBED'}},
+	{'$unwind':'$emBED'},
+	{'$project':{'id':1,'_id':0,'description':1,'title':1,'salary':1,'employer_id':'$emBED.id','employer_name':'$emBED.name'}}]
+	jobCur=dbo.job.aggregate(qpipe)
+	for jobie in jobCur:
+		jobie
+	return render_template('job.html', job=jobie)
 
 @app.route('/employer/<employer_id>')
 def employer(employer_id):
-	employer=execute_sql('SELECT * FROM employer WHERE id=?',[employer_id],single=True)
-	jobs=execute_sql('SELECT job.id, job.title, job.description, job.salary FROM job JOIN employer ON employer.id = job.employer_id WHERE employer.id = ?', [employer_id])
-	reviews=execute_sql('SELECT review, rating, title, date, status FROM review JOIN employer ON employer.id = review.employer_id WHERE employer.id = ?', [employer_id])
+	eid=int(employer_id)
+	qpipe=odict([('jobs',[{'$match':{'employer_id':eid}},
+	{'$lookup':{'from':'employer','localField':'employer_id','foreignField':'id','as':'emBED'}},
+	{'$unwind':'$emBED'},
+	{'$project':{'id':1,'_id':0,'title':1,'description':1,'salary':1}}]),
+	('review',[{'$match':{'employer_id':eid}},
+	{'$lookup':{'from':'employer','localField':'employer_id','foreignField':'id','as':'emBED'}},
+	{'$unwind':'$emBED'},
+	{'$project':{'review':1,'rating':1,'title':1,'date':1,'status':1}}])])
+	employer=list(dbo.employer.find({'id':eid}))[0]
+	jobs=dbo.job.aggregate(qpipe['jobs'])
+	reviews=dbo.review.aggregate(qpipe['review'])
 	return render_template('employer.html',employer=employer,jobs=jobs,reviews=reviews)
 
 @app.route('/employer/<employer_id>/review', methods=('GET', 'POST'))
 def review(employer_id):
+	eid=int(employer_id)
 	if request.method=='POST':
 		review=request.form['review']
 		rating=request.form['rating']
 		title=request.form['title']
 		status=request.form['status']
-		date=datetime.datetime.now().strftime("%m/%d/%Y")
-		execute_sql('INSERT INTO review (review, rating, title, date, status, employer_id) VALUES (?, ?, ?, ?, ?, ?)', (review, rating, title, date, status, employer_id), commit=True)
-		return redirect(url_for('employer', employer_id=employer_id))
-	return render_template('review.html',employer_id=employer_id)
+		date=dt.utcnow().strftime("%m/%d/%Y")
+		qpost={'review':review,'rating':int(rating),'title':title,'status':status,'date':date,'employer_id':eid}
+		print(qpost)
+		dbo.review.insert_one(qpost)
+		return redirect(url_for('employer', employer_id=eid))
+	return render_template('review.html',employer_id=eid)
 
 if __name__=='__main__':
-	app.run(debug=True,host='0.0.0.0',port=8008)
+	app.run(debug=True,host='0.0.0.0',port=80)

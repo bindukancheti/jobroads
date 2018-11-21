@@ -13,6 +13,12 @@
 
   <h2>Reviews</h2>
 
+  <div class="columns">
+    <div class="column">
+      <a href="{{ url_for('review', employer_id=employer['id']) }}" class="button is-info is-pulled-right">Create Review</a>
+    </div>
+  </div>
+
   {% for review in reviews %}
     <div class="box">
       <article class="media">
@@ -28,15 +34,10 @@
               <small>{{ review['status'] }}</small>
               <small>{{ review['date'] }}</small>
               {{ review['review'] }}
+            </p>
           </div>
         </div>
       </article>
     </div>
       {% endfor %}
-    #}
-  <div class="columns">
-    <div class="column">
-      <a href="{{ url_for('review', employer_id=employer['id']) }}" class="button is-info is-pulled-right">Create Review</a>
-    </div>
-  </div>
 {% endblock %}
